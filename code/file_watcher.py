@@ -6,15 +6,17 @@ import logging
 import logging.handlers
 import sys
 import winreg
-from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from threat_engine import LocalThreatEngine, QuarantineManager
 
 # ─── CONFIGURATION ────────────────────────────────────────────────────────────
 WATCH_FOLDER = os.path.expanduser(r"~")          # Dossier surveillé (~ = home user)
 LOG_FILE     = os.path.join(os.path.expanduser("~"), "fileguard.log")
 SCRIPT_PATH  = os.path.abspath(__file__)
 MAX_LOG_MB   = 5                                  # Rotation log à 5 MB
+QUARANTINE_DIR = os.path.join(os.path.expanduser("~"), "FileGuard", "quarantine")
+EVENT_DEBOUNCE_SECONDS = 2.0
 # ──────────────────────────────────────────────────────────────────────────────
 
 BANNED_WORDS = [
@@ -109,12 +111,49 @@ def delete_target(path: str) -> None:
             return
 
 
+ENGINE = LocalThreatEngine()
+QUARANTINE = QuarantineManager(QUARANTINE_DIR)
+
+
 class BanHandler(FileSystemEventHandler):
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_seen: dict[str, float] = {}
+
+    def _is_debounced(self, path: str) -> bool:
+        now = time.time()
+        last = self._last_seen.get(path, 0.0)
+        self._last_seen[path] = now
+        return (now - last) < EVENT_DEBOUNCE_SECONDS
+
     def _check(self, path: str) -> None:
+        if self._is_debounced(path):
+            return
+
         banned, word = is_banned(path)
         if banned:
             logging.info(f"[DETECTED] '{os.path.basename(path)}' — mot banni : '{word}'")
-            delete_target(path)
+            scan = ENGINE.evaluate(path)
+            ok, destination = QUARANTINE.quarantine(path, scan)
+            if ok:
+                logging.warning(
+                    f"[QUARANTINE] {path} -> {destination} | score={scan.score} | reasons={','.join(scan.reasons)}"
+                )
+            else:
+                logging.warning(f"[QUARANTINE_FAILED] {path} | fallback delete | error={destination}")
+                delete_target(path)
+            return
+
+        # "AI-style" local risk scoring even when no explicit banned keyword matches.
+        scan = ENGINE.evaluate(path)
+        if scan.verdict in {"suspicious", "malicious"}:
+            ok, destination = QUARANTINE.quarantine(path, scan)
+            if ok:
+                logging.warning(
+                    f"[QUARANTINE_HEURISTIC] {path} -> {destination} | verdict={scan.verdict} | score={scan.score}"
+                )
+            else:
+                logging.warning(f"[QUARANTINE_HEURISTIC_FAILED] {path} | error={destination}")
 
     def on_created(self, event):
         self._check(event.src_path)
@@ -131,7 +170,9 @@ if __name__ == "__main__":
         install_autostart()
         sys.exit(0)
 
-    logging.info(f"[START] Surveillance de '{WATCH_FOLDER}' — {len(BANNED_WORDS)} signatures chargées")
+    logging.info(
+        f"[START] Surveillance de '{WATCH_FOLDER}' — {len(BANNED_WORDS)} signatures chargées | quarantine={QUARANTINE_DIR}"
+    )
     print(f"[*] FileGuard Watcher actif sur : {WATCH_FOLDER}")
 
     observer = Observer()

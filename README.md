@@ -7,7 +7,7 @@
 
 ## Overview
 
-FileGuard is a real-time file system monitor built in Python. It detects and neutralizes suspicious files based on their name, enforces integrity on protected documents, and ensures its own persistence through a process watchdog — without any external antivirus engine.
+FileGuard is a real-time file system monitor built in Python. It now combines explicit signatures (known bad names) and a local heuristic scoring engine ("AI-style" risk scoring) to classify and quarantine suspicious files, enforces integrity on protected documents, and ensures its own persistence through a process watchdog.
 
 Built as a hands-on exercise in Windows security mechanisms: registry persistence, file system events via native OS APIs, and process monitoring.
 
@@ -19,9 +19,10 @@ Three independent components running in parallel:
 
 | Component | Role |
 |---|---|
-| `file_watcher.py` | Real-time threat detection & deletion |
+| `file_watcher.py` | Real-time threat detection, scoring, and quarantine |
 | `restorer.py` | File integrity enforcement + PC shutdown on tampering |
 | `guardian.py` | Process watchdog — relaunches the two above if killed |
+| `threat_engine.py` | Local heuristic risk scoring + quarantine event metadata |
 
 ---
 
@@ -29,15 +30,30 @@ Three independent components running in parallel:
 
 ### file_watcher.py — Threat Scanner
 
-Monitors a target folder recursively using `watchdog` (wraps `ReadDirectoryChangesW` on Windows). On every file/folder creation, modification, or rename, the filename is tested against a compiled regex of 60+ known malware names, ransomware families, offensive tools, and generic suspicious keywords.
+Monitors a target folder recursively using `watchdog` (wraps `ReadDirectoryChangesW` on Windows). On every file/folder creation, modification, or rename:
+- the filename is tested against a compiled regex of 60+ known malware names, ransomware families, offensive tools, and generic suspicious keywords
+- a local heuristic engine computes a risk score (extension, entropy, filename anomalies, tiny script/executable signals)
+- suspicious/malicious files are moved to quarantine with JSONL metadata instead of immediate hard delete
 
 **Key design choices:**
 - Case-insensitive regex compiled once at startup — O(1) per check
 - Covers `on_created`, `on_modified` AND `on_moved` — catches evasion via rename
-- 3-attempt retry loop with progressive backoff — handles Windows file locking
-- Covers both files and directories (`shutil.rmtree` for dirs)
+- Event debounce to reduce duplicate processing storms
+- Quarantine-first strategy with delete fallback if move fails
 - Registry autostart via `--install` flag
 - Rotating log (5 MB max, 3 backups)
+
+### threat_engine.py — Local Heuristic Engine
+
+Computes a lightweight score out of 100 from multiple weak signals, then maps it to:
+- `clean`
+- `suspicious`
+- `malicious`
+
+This is not ML model inference, but a practical local "AI-style" scoring strategy useful for constrained/offline public PCs.
+
+It also handles quarantine storage and writes one JSON event per line in:
+- `%USERPROFILE%\FileGuard\quarantine\events.jsonl`
 
 ---
 
@@ -163,11 +179,12 @@ More efficient than looping through a list — the regex engine uses an NFA/DFA 
 
 ### Current limitations
 
-- **Name-based detection only** — does not scan file content or compute hashes
+- **Not a kernel AV** — user-space only, no kernel driver and no process memory scan
+- **Heuristic local scoring** — better than name-only, but still not equivalent to enterprise EDR/AV engines
 - **No network monitoring** — local filesystem only
 - **User-space** — SYSTEM-level processes can bypass
 - **Safe mode** — `HKCU\Run` keys don't execute in Windows Safe Mode
-- **No quarantine** — files are deleted immediately with no recovery option
+- **No cloud reputation feed by default** — no VirusTotal/SIEM enrichment yet
 - Generic keywords (`trojan`, `virus`) may produce false positives on security research files
 
 ### Possible extensions

@@ -7,19 +7,17 @@ import logging
 import logging.handlers
 import psutil
 
-# ─── CONFIGURATION ────────────────────────────────────────────────────────────
-SCRIPT_PATH   = os.path.abspath(__file__)
-LOG_FILE      = os.path.join(os.path.expanduser("~"), "fileguard.log")
-CHECK_INTERVAL = 5          # secondes entre chaque vérification
-MAX_LOG_MB    = 5
+# CONFIG
+SCRIPT_PATH = os.path.abspath(__file__)
+LOG_FILE = os.path.join(os.path.expanduser("~"), "fileguard.log")
+CHECK_INTERVAL = 5  # check tous les 5s
+MAX_LOG_MB = 5
 
-# Chemins des scripts à surveiller
-# Si tu utilises des .exe (PyInstaller), remplace par les chemins des .exe
+# Scripts à surveiller (remplace par .exe si compilé avec PyInstaller)
 GUARDED_SCRIPTS = [
     os.path.join(os.path.dirname(SCRIPT_PATH), "file_watcher.py"),
     os.path.join(os.path.dirname(SCRIPT_PATH), "restorer.py"),
 ]
-# ──────────────────────────────────────────────────────────────────────────────
 
 _handler = logging.handlers.RotatingFileHandler(
     LOG_FILE, maxBytes=MAX_LOG_MB * 1024 * 1024, backupCount=3, encoding="utf-8"
@@ -45,16 +43,13 @@ def install_autostart() -> None:
 
 
 def is_running(script: str) -> bool:
-    """Vérifie si un script (ou exe) tourne déjà comme processus."""
     target = os.path.normcase(os.path.abspath(script))
     for proc in psutil.process_iter(["cmdline", "exe"]):
         try:
-            # Vérifie les arguments de la ligne de commande
             cmdline = proc.info.get("cmdline") or []
             for arg in cmdline:
                 if os.path.normcase(os.path.abspath(arg)) == target:
                     return True
-            # Vérifie aussi le chemin de l'exe (pour les binaires PyInstaller)
             exe = proc.info.get("exe") or ""
             if exe and os.path.normcase(os.path.abspath(exe)) == target:
                 return True
@@ -68,7 +63,7 @@ def launch(script: str) -> None:
     if not os.path.exists(pythonw):
         pythonw = sys.executable
 
-    # Support .exe PyInstaller : lance directement sans interpréteur
+    # .exe direct, sinon via python
     if script.lower().endswith(".exe"):
         subprocess.Popen([script], creationflags=subprocess.DETACHED_PROCESS)
     else:
@@ -87,8 +82,8 @@ if __name__ == "__main__":
         install_autostart()
         sys.exit(0)
 
-    logging.info(f"[START] Guardian actif — surveille {len(GUARDED_SCRIPTS)} processus")
-    print(f"[*] FileGuard Guardian actif — intervalle : {CHECK_INTERVAL}s")
+    logging.info(f"[START] Guardian actif - surveille {len(GUARDED_SCRIPTS)} processus")
+    print(f"[*] Watchdog Guardian actif - intervalle : {CHECK_INTERVAL}s")
 
     while True:
         for script in GUARDED_SCRIPTS:

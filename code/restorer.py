@@ -8,15 +8,13 @@ import winreg
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-# ─── CONFIGURATION ────────────────────────────────────────────────────────────
-SCRIPT_PATH  = os.path.abspath(__file__)
-LOG_FILE     = os.path.join(os.path.expanduser("~"), "fileguard.log")
-SHUTDOWN_DELAY = 5          # secondes avant extinction
-MAX_LOG_MB   = 5
-# ──────────────────────────────────────────────────────────────────────────────
+# CONFIG
+SCRIPT_PATH = os.path.abspath(__file__)
+LOG_FILE = os.path.join(os.path.expanduser("~"), "fileguard.log")
+SHUTDOWN_DELAY = 5  # avant extinction
+MAX_LOG_MB = 5
 
-# Fichiers protégés : chemin absolu → contenu à restaurer
-# Ajoute autant d'entrées que nécessaire
+# Fichiers protégés : chemin → contenu
 PROTECTED_FILES: dict[str, str] = {
     os.path.join(os.path.expanduser("~"), "Desktop", "READ_BEFORE_USING.txt"): (
         "🐻‍❄️ Before you use this PC to \"create\" with AI\n\n"
@@ -31,11 +29,9 @@ PROTECTED_FILES: dict[str, str] = {
         "• Protect this machine: Stop downloading random stuff.\n\n"
         "• Have some ethics: If your goal is to manipulate or deceive, you're wasting your time.\n"
     ),
-    # Ajoute d'autres fichiers protégés ici :
-    # r"C:\path\to\other_protected_file.txt": "contenu...",
+    # Ajoute d'autres fichiers ici si besoin
 }
 
-# Rotation automatique du log (partagé avec file_watcher)
 _handler = logging.handlers.RotatingFileHandler(
     LOG_FILE, maxBytes=MAX_LOG_MB * 1024 * 1024, backupCount=3, encoding="utf-8"
 )
@@ -83,7 +79,7 @@ def restore_file(path: str) -> None:
 
 
 def ensure_all() -> None:
-    """Restaure tous les fichiers protégés manquants au démarrage."""
+    """Restaure les fichiers protégés au démarrage."""
     for path in PROTECTED_FILES:
         if not os.path.exists(path):
             logging.info(f"[MISSING] fichier protégé absent au démarrage, restauration : {path}")
@@ -99,7 +95,6 @@ class RestoreHandler(FileSystemEventHandler):
             restore_file(path)
 
     def on_moved(self, event):
-        # Couvre le cas où le fichier protégé est renommé/déplacé
         if event.src_path in PROTECTED_FILES:
             shutdown(reason=f"Fichier protégé déplacé : {os.path.basename(event.src_path)}")
             time.sleep(0.3)

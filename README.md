@@ -1,4 +1,4 @@
-# 🛡️ FileGuard — Lightweight File System Monitor
+# � Watchdog — Lightweight File System Monitor
 
 > **Portfolio Project — Cybersecurity / Blue Team**  
 > Python · Windows 10/11 · watchdog · psutil · PyInstaller
@@ -7,7 +7,7 @@
 
 ## Overview
 
-FileGuard is a real-time file system monitor built in Python. It now combines explicit signatures (known bad names) and a local heuristic scoring engine ("AI-style" risk scoring) to classify and quarantine suspicious files, enforces integrity on protected documents, and ensures its own persistence through a process watchdog.
+Watchdog is a real-time file system monitor built in Python. It combines explicit signatures (known bad names) and a local heuristic scoring engine to classify and quarantine suspicious files, enforces integrity on protected documents, and ensures its own persistence through a process watchdog.
 
 Built as a hands-on exercise in Windows security mechanisms: registry persistence, file system events via native OS APIs, and process monitoring.
 
@@ -83,56 +83,98 @@ Polls every 5 seconds to verify that `file_watcher.py` and `restorer.py` are run
 
 ## Installation
 
-### 1. Prerequisites
+### 1. Prérequis
 
+Installer les dépendances Python :
+
+```powershell
+pip install -r requirements.txt
 ```
-pip install watchdog psutil pyinstaller
+
+Ou manuellement :
+
+```powershell
+pip install watchdog>=4.0.0 psutil>=5.9.0 pyinstaller
 ```
 
 ### 2. Configuration
 
-Edit the constants at the top of each file:
+Modifier les constantes au début de chaque fichier :
 
 ```
 file_watcher.py  →  WATCH_FOLDER, LOG_FILE
-restorer.py      →  PROTECTED_FILES dict (path → content), LOG_FILE
+restorer.py      →  PROTECTED_FILES dict (chemin → contenu), LOG_FILE
 guardian.py      →  GUARDED_SCRIPTS list
 ```
 
-### 3. Register autostart
+### 3. Lancer en mode développement
 
 ```powershell
-python file_watcher.py --install
-python restorer.py     --install
-python guardian.py     --install
+# Terminal 1
+python code/file_watcher.py
+
+# Terminal 2
+python code/restorer.py
+
+# Terminal 3
+python code/guardian.py
 ```
 
-Writes to `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — no admin required.
+### 4. Enregistrer au démarrage (optionnel)
 
-Verify:
+```powershell
+python code/file_watcher.py --install
+python code/restorer.py     --install
+python code/guardian.py     --install
+```
+
+Écrit dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — aucun accès admin requis.
+
+Vérifier :
 ```powershell
 reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 ```
 
-### 4. Hide the files (optional)
+### 5. Masquer les fichiers (optionnel)
 
 ```powershell
-attrib +h +s C:\Tools\file_watcher.py
-attrib +h +s C:\Tools\restorer.py
-attrib +h +s C:\Tools\guardian.py
-attrib +h +s C:\Tools
+attrib +h +s C:\Chemin\watchdog\code\*.py
+attrib +h +s C:\Chemin\watchdog\code
 ```
 
-### 5. Build standalone .exe (optional)
+### 6. Compiler en .exe (optionnel)
 
 ```powershell
-cd C:\Users\<user>\Desktop
-pyinstaller --onefile --noconsole --distpath .\dist C:\Tools\file_watcher.py
-pyinstaller --onefile --noconsole --distpath .\dist C:\Tools\restorer.py
-pyinstaller --onefile --noconsole --distpath .\dist C:\Tools\guardian.py
+cd C:\Chemin\watchdog\build
+pyinstaller --onefile --noconsole --distpath .\dist ..\code\file_watcher.py
+pyinstaller --onefile --noconsole --distpath .\dist ..\code\restorer.py
+pyinstaller --onefile --noconsole --distpath .\dist ..\code\guardian.py
 ```
 
-> Update `GUARDED_SCRIPTS` in `guardian.py` to point to the `.exe` paths before building.
+Mettre à jour `GUARDED_SCRIPTS` dans `guardian.py` pour pointer vers les chemins `.exe` avant de compiler.
+
+### 7. Créer un raccourci sur le bureau (optionnel)
+
+#### Option A : Via PowerShell
+
+```powershell
+$TargetPath = "C:\Chemin\watchdog\build\dist\guardian.exe"
+$ShortcutPath = "$env:USERPROFILE\Desktop\Watchdog.lnk"
+$WshShell = New-Object -ComObject WScript.Shell
+
+$Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+$Shortcut.TargetPath = $TargetPath
+$Shortcut.WindowStyle = 7  # Mode masqué
+$Shortcut.Save()
+
+Write-Host "Raccourci créé: $ShortcutPath"
+```
+
+#### Option B : Manuellement
+
+1. Clic droit sur le fichier `.exe` (ou `python file_watcher.py`)
+2. Envoyer vers → Bureau (créer un raccourci)
+3. Renommer le raccourci en "Watchdog"
 
 ---
 

@@ -266,7 +266,7 @@ class DashboardPage(QWidget):
         self.feed_layout.setContentsMargins(0, 0, 0, 0)
         self.feed_layout.setSpacing(6)
 
-        self.empty_lbl = QLabel("Aucun événement — le système surveille en silence 🛡️")
+        self.empty_lbl = QLabel("Aucun événement — le système surveille en silence �")
         self.empty_lbl.setStyleSheet(f"color: {TEXT_SEC}; font-size: 13px;")
         self.empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.feed_layout.addWidget(self.empty_lbl)
@@ -504,7 +504,7 @@ class ScannerPage(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FileGuard")
+        self.setWindowTitle("Watchdog")
         self.setMinimumSize(1100, 680)
         self.setStyleSheet(stylesheet())
         self._build_ui()
@@ -526,9 +526,9 @@ class MainWindow(QMainWindow):
         side_layout.setSpacing(4)
 
         logo_row = QHBoxLayout()
-        shield = QLabel("🛡️")
+        shield = QLabel("🐕")
         shield.setStyleSheet("font-size: 22px;")
-        name = QLabel("FileGuard")
+        name = QLabel("Watchdog")
         name.setStyleSheet(f"color: {TEXT_PRI}; font-size: 16px; font-weight: 700;")
         version = QLabel("v2.0")
         version.setStyleSheet(f"color: {TEXT_SEC}; font-size: 11px;")
@@ -602,7 +602,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("FileGuard")
+    app.setApplicationName("Watchdog")
     win = MainWindow()
     win.show()
     sys.exit(app.exec())

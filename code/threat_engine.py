@@ -19,10 +19,7 @@ class ScanResult:
 
 
 class LocalThreatEngine:
-    """
-    Lightweight local "AI-style" scoring engine.
-    It combines several weak signals into a single risk score.
-    """
+    """Score léger basé sur plusieurs petits signaux d'alerte."""
 
     def __init__(self) -> None:
         risky_words = [
@@ -72,7 +69,7 @@ class LocalThreatEngine:
         if os.path.isfile(path):
             size = os.path.getsize(path)
 
-            # Tiny script/executable droppers are common in incident response.
+            # Petits exes/scripts = suspect
             if extension in {".exe", ".dll", ".js", ".vbs", ".ps1", ".bat", ".cmd"} and size < 40 * 1024:
                 score += 20
                 reasons.append("small_executable_or_script")

@@ -43,11 +43,11 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,          # Pas de console noire qui s'ouvre
+    console=False,          
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,              # Remplace par 'fileguard.ico' si t'as une icône
+    icon='fileguard.ico',              
 )

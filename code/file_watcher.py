@@ -10,56 +10,54 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from threat_engine import LocalThreatEngine, QuarantineManager
 
-# ─── CONFIGURATION ────────────────────────────────────────────────────────────
-WATCH_FOLDER = os.path.expanduser(r"~")          # Dossier surveillé (~ = home user)
-LOG_FILE     = os.path.join(os.path.expanduser("~"), "fileguard.log")
-SCRIPT_PATH  = os.path.abspath(__file__)
-MAX_LOG_MB   = 5                                  # Rotation log à 5 MB
+# CONFIG
+WATCH_FOLDER = os.path.expanduser(r"~")  # home user
+LOG_FILE = os.path.join(os.path.expanduser("~"), "fileguard.log")
+SCRIPT_PATH = os.path.abspath(__file__)
+MAX_LOG_MB = 5
 QUARANTINE_DIR = os.path.join(os.path.expanduser("~"), "FileGuard", "quarantine")
 EVENT_DEBOUNCE_SECONDS = 2.0
-# ──────────────────────────────────────────────────────────────────────────────
 
 BANNED_WORDS = [
-    # ── Ransomware ──────────────────────────────────────────────────────────
+    # Ransomware
     "wannacry", "wannacrypt", "petya", "notpetya", "locky", "ryuk", "revil",
     "darkside", "conti", "lockbit", "blackcat", "alphv", "maze", "sodinokibi",
     "gandcrab", "cerber", "cryptolocker", "cryptowall", "badrabbit", "samsa",
     "clop", "hive", "ragnarok", "netwalker", "egregor", "avaddon",
-    # ── RATs / Stealers ─────────────────────────────────────────────────────
+    # RATs & Stealers
     "njrat", "darkcomet", "asyncrat", "quasar", "remcos", "nanocore",
     "xtremerat", "cybergate", "pandabanker", "emotet", "trickbot", "dridex",
     "agent tesla", "agent_tesla", "formbook", "azorult", "hawkeye", "loki",
     "raccoon", "redline", "vidar", "arkei", "warzone",
-    # ── C2 Frameworks / Offensive tools ─────────────────────────────────────
+    # C2 & Offensive tools
     "metasploit", "msfvenom", "msfconsole", "cobalt strike", "cobaltstrike",
     "empire", "powersploit", "mimikatz", "meterpreter", "shellter",
     "veil", "unicorn", "pupy", "havoc", "brute ratel", "bruteratel", "sliver",
-    # ── Spyware / Stalkerware ────────────────────────────────────────────────
+    # Spyware & Stalkerware
     "stalkerware", "pegasus", "finspy", "darkspy",
-    # ── Bootkits / Rootkits ──────────────────────────────────────────────────
+    # Bootkits & Rootkits
     "bootkit", "necurs", "rustock", "tdss", "zeroaccess",
-    # ── Botnets / Worms ──────────────────────────────────────────────────────
+    # Botnets & Worms
     "mirai", "conficker", "stuxnet", "flame", "regin", "sality",
     "zeus", "gameover", "blackenergy", "industroyer", "triton",
-    # ── Offensive recon / cracking ───────────────────────────────────────────
+    # Recon & cracking
     "nmap_scan", "masscan", "zmap", "sqlmap", "hydra_brute",
     "aircrack", "hashcat", "johntheripper", "john_the_ripper",
-    # ── Web shells / Backdoors ───────────────────────────────────────────────
+    # Web shells & Backdoors
     "netcat_backdoor", "weevely", "webshell", "c99shell", "r57shell",
     "b374k", "antsword", "chopper",
-    # ── Generic threat keywords ──────────────────────────────────────────────
+    # Generic threats
     "malware", "ransomware", "exploit", "payload", "shellcode", "backdoor",
     "rootkit", "keylogger", "spyware", "trojan", "dropper",
     "crypter", "bypass_av", "antivirus_bypass",
 ]
 
-# Compile une seule regex pour toutes les détections — plus efficace qu'une boucle
+# Une seule regex = pas de boucle = plus rapide
 BANNED_PATTERN = re.compile(
     r"(" + "|".join(re.escape(w) for w in BANNED_WORDS) + r")",
     re.IGNORECASE
 )
 
-# Rotation automatique du log (5 MB max, 3 backups)
 _handler = logging.handlers.RotatingFileHandler(
     LOG_FILE, maxBytes=MAX_LOG_MB * 1024 * 1024, backupCount=3, encoding="utf-8"
 )
@@ -71,7 +69,7 @@ logging.getLogger().setLevel(logging.INFO)
 def install_autostart():
     pythonw = sys.executable.replace("python.exe", "pythonw.exe")
     if not os.path.exists(pythonw):
-        pythonw = sys.executable          # fallback si pythonw absent
+        pythonw = sys.executable  # fallback
     value = f'"{pythonw}" "{SCRIPT_PATH}"'
     key = winreg.OpenKey(
         winreg.HKEY_CURRENT_USER,

@@ -1,91 +1,86 @@
-# Watchdog — Moniteur de Système de Fichiers Léger
+# Watchdog — Moniteur de système de fichiers léger
 
-> **Projet Portfolio — Cybersécurité / Blue Team**  
+> **Projet portfolio — Cybersécurité / Blue Team**  
 > Python · Windows 10/11 · watchdog · psutil · PyInstaller
 
 ---
 
-## Vue d'ensemble
+## Présentation
 
-Watchdog est un moniteur de système de fichiers en temps réel écrit en Python. Il combine des signatures explicites (noms malveillants connus) et un moteur de scoring heuristique local pour classer et mettre en quarantaine les fichiers suspects, assure l'intégrité des documents protégés, et garantit sa propre persistance via un processus watchdog.
+Watchdog surveille un dossier en temps réel et détecte les fichiers suspects à partir de signatures connues et d'un scoring heuristique local. Les fichiers identifiés comme malveillants sont mis en quarantaine automatiquement. Le projet couvre aussi l'intégrité de fichiers protégés et sa propre persistance via un processus gardien.
 
-Conçu comme un exercice pratique sur les mécanismes de sécurité Windows : persistance par le registre, événements du système de fichiers via les API natives du système d'exploitation, et surveillance des processus.
+C'est un projet pratique pour explorer les mécanismes de sécurité Windows : persistance par le registre, surveillance du système de fichiers via l'API native, et monitoring de processus.
 
 ---
 
 ## Architecture
 
-Trois composants indépendants fonctionnant en parallèle :
+Trois composants indépendants tournent en parallèle :
 
 | Composant | Rôle |
 |---|---|
-| `file_watcher.py` | Détection des menaces en temps réel, scoring et quarantaine |
-| `restorer.py` | Application de l'intégrité des fichiers + extinction du PC en cas de falsification |
-| `guardian.py` | Processus watchdog — relance les deux composants ci-dessus s'ils sont tués |
-| `threat_engine.py` | Scoring heuristique local des risques + métadonnées des événements de quarantaine |
+| `file_watcher.py` | Détection des menaces, scoring et mise en quarantaine |
+| `restorer.py` | Intégrité des fichiers protégés + extinction du PC en cas de suppression |
+| `guardian.py` | Relance les deux composants ci-dessus s'ils sont tués |
+| `threat_engine.py` | Calcul du score de risque + écriture des métadonnées de quarantaine |
 
 ---
 
 ## Composants
 
-### file_watcher.py — Scanner de Menaces
+### file_watcher.py — Scanner de menaces
 
-Surveille récursivement un dossier cible via `watchdog` (encapsule `ReadDirectoryChangesW` sur Windows). À chaque création, modification ou renommage de fichier/dossier :
-- le nom du fichier est testé contre une regex compilée de 60+ noms de malwares connus, familles de ransomwares, outils offensifs et mots-clés suspects génériques
-- un moteur heuristique local calcule un score de risque (extension, entropie, anomalies dans le nom de fichier, signaux de scripts/exécutables suspects)
-- les fichiers suspects/malveillants sont déplacés en quarantaine avec des métadonnées JSONL, plutôt que supprimés immédiatement
+Surveille récursivement un dossier cible via `watchdog` (qui encapsule `ReadDirectoryChangesW` sur Windows). À chaque création, modification ou renommage :
 
-**Choix de conception clés :**
-- Regex insensible à la casse compilée une seule fois au démarrage — O(1) par vérification
-- Couvre `on_created`, `on_modified` ET `on_moved` — détecte l'évasion par renommage
-- Débounce des événements pour réduire les tempêtes de traitement en double
-- Stratégie quarantaine-en-premier avec suppression en dernier recours si le déplacement échoue
-- Démarrage automatique via le registre avec le flag `--install`
-- Log rotatif (5 Mo max, 3 sauvegardes)
+- le nom du fichier est comparé à une regex compilée de 60+ signatures (noms de malwares, familles de ransomwares, outils offensifs, mots-clés génériques)
+- un score de risque est calculé localement (extension, entropie, anomalies dans le nom, présence de scripts ou d'exécutables suspects)
+- les fichiers détectés sont déplacés en quarantaine avec métadonnées JSONL — la suppression directe n'est qu'un recours si le déplacement échoue
 
-### threat_engine.py — Moteur Heuristique Local
+Points notables :
+- regex insensible à la casse, compilée une seule fois au démarrage — O(1) par vérification
+- couvre `on_created`, `on_modified` et `on_moved` pour attraper les tentatives d'évasion par renommage
+- débounce des événements pour éviter les doublons
+- démarrage automatique via le registre avec `--install`
+- log rotatif (5 Mo max, 3 sauvegardes)
 
-Calcule un score léger sur 100 à partir de plusieurs signaux faibles, puis le mappe vers :
-- `clean` (sain)
-- `suspicious` (suspect)
-- `malicious` (malveillant)
+### threat_engine.py — Moteur de scoring
 
-Il ne s'agit pas d'inférence par modèle ML, mais d'une stratégie de scoring local pratique de style « IA » utile pour des PC publics contraints ou hors ligne.
+Agrège plusieurs signaux faibles en un score sur 100, puis le classe en :
 
-Il gère également le stockage en quarantaine et écrit un événement JSON par ligne dans :
-- `%USERPROFILE%\FileGuard\quarantine\events.jsonl`
+- `clean`
+- `suspicious`
+- `malicious`
 
----
+Pas de modèle ML — c'est du scoring heuristique pur, conçu pour fonctionner hors ligne sur des machines contraintes. Les événements de quarantaine sont écrits ligne par ligne dans :
 
-### restorer.py — Moniteur d'Intégrité des Fichiers
+```
+%USERPROFILE%\FileGuard\quarantine\events.jsonl
+```
 
-Surveille un ensemble de fichiers protégés et réagit aux événements de suppression ou de déplacement. Si un fichier protégé est supprimé, le système déclenche un arrêt Windows (délai de grâce de 5s) et recrée immédiatement le fichier avec son contenu d'origine.
+### restorer.py — Intégrité des fichiers
 
-**Choix de conception clés :**
-- Basé sur un dictionnaire : `chemin → contenu`, facilement extensible à plusieurs fichiers
-- `ensure_all()` au démarrage : recrée les fichiers manquants avant le lancement de l'observateur
-- Couvre `on_deleted` ET `on_moved` — renommer le fichier déclenche aussi l'arrêt
-- `shutdown /s /t 5` laisse un avertissement visible à l'utilisateur avant l'extinction
+Surveille un ensemble de fichiers protégés. Si l'un d'eux est supprimé ou déplacé, le système recrée immédiatement le fichier avec son contenu d'origine et déclenche un arrêt Windows avec 5 secondes de délai.
 
----
+Points notables :
+- structure `chemin → contenu` sous forme de dictionnaire, simple à étendre
+- `ensure_all()` au démarrage recrée les fichiers manquants avant que l'observateur ne commence
+- couvre `on_deleted` et `on_moved` — renommer le fichier déclenche aussi l'arrêt
 
-### guardian.py — Processus Watchdog
+### guardian.py — Processus gardien
 
-Interroge toutes les 5 secondes pour vérifier que `file_watcher.py` et `restorer.py` sont en cours d'exécution. Si l'un d'eux est absent (tué via le Gestionnaire des tâches ou crash), guardian le relance silencieusement.
+Vérifie toutes les 5 secondes que `file_watcher.py` et `restorer.py` tournent. Si l'un est absent (tué depuis le gestionnaire des tâches ou crash), il est relancé silencieusement.
 
-**Choix de conception clés :**
-- Utilise `psutil.process_iter` pour inspecter la ligne de commande de tous les processus en cours
-- Comparaison `os.path.normcase` — insensible à la casse, gère les variantes de chemin
-- Support natif des `.exe` — même code avant et après compilation PyInstaller
-- Flag `DETACHED_PROCESS` — les processus relancés survivent à la mort de guardian
+Points notables :
+- inspecte la ligne de commande de chaque processus via `psutil.process_iter`
+- comparaison `os.path.normcase` — insensible à la casse, robuste aux variantes de chemin
+- fonctionne aussi bien avec les `.py` qu'avec les `.exe` compilés
+- flag `DETACHED_PROCESS` — les processus relancés survivent si guardian lui-même est tué
 
 ---
 
 ## Installation
 
 ### 1. Prérequis
-
-Installer les dépendances Python :
 
 ```powershell
 pip install -r requirements.txt
@@ -99,15 +94,15 @@ pip install watchdog>=4.0.0 psutil>=5.9.0 pyinstaller
 
 ### 2. Configuration
 
-Modifier les constantes au début de chaque fichier :
+Modifier les constantes en tête de chaque fichier :
 
 ```
 file_watcher.py  →  WATCH_FOLDER, LOG_FILE
-restorer.py      →  dictionnaire PROTECTED_FILES (chemin → contenu), LOG_FILE
-guardian.py      →  liste GUARDED_SCRIPTS
+restorer.py      →  PROTECTED_FILES (chemin → contenu), LOG_FILE
+guardian.py      →  GUARDED_SCRIPTS
 ```
 
-### 3. Lancer en mode développement
+### 3. Lancement en mode développement
 
 ```powershell
 # Terminal 1
@@ -120,7 +115,7 @@ python code/restorer.py
 python code/guardian.py
 ```
 
-### 4. Enregistrer au démarrage (optionnel)
+### 4. Démarrage automatique (optionnel)
 
 ```powershell
 python code/file_watcher.py --install
@@ -128,9 +123,9 @@ python code/restorer.py     --install
 python code/guardian.py     --install
 ```
 
-Écrit dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — aucun accès administrateur requis.
+Écrit dans `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` — aucun droit administrateur requis.
 
-Vérifier :
+Pour vérifier :
 ```powershell
 reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 ```
@@ -142,7 +137,7 @@ attrib +h +s C:\Chemin\watchdog\code\*.py
 attrib +h +s C:\Chemin\watchdog\code
 ```
 
-### 6. Compiler en .exe (optionnel)
+### 6. Compilation en .exe (optionnel)
 
 ```powershell
 cd C:\Chemin\watchdog\build
@@ -151,11 +146,11 @@ pyinstaller --onefile --noconsole --distpath .\dist ..\code\restorer.py
 pyinstaller --onefile --noconsole --distpath .\dist ..\code\guardian.py
 ```
 
-Mettre à jour `GUARDED_SCRIPTS` dans `guardian.py` pour pointer vers les chemins `.exe` avant de compiler.
+Mettre à jour `GUARDED_SCRIPTS` dans `guardian.py` pour pointer vers les `.exe` avant de compiler.
 
-### 7. Créer un raccourci sur le bureau (optionnel)
+### 7. Raccourci bureau (optionnel)
 
-#### Option A : Via PowerShell
+**Via PowerShell :**
 
 ```powershell
 $TargetPath = "C:\Chemin\watchdog\build\dist\guardian.exe"
@@ -164,91 +159,91 @@ $WshShell = New-Object -ComObject WScript.Shell
 
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $TargetPath
-$Shortcut.WindowStyle = 7  # Mode masqué
+$Shortcut.WindowStyle = 7
 $Shortcut.Save()
 
 Write-Host "Raccourci créé : $ShortcutPath"
 ```
 
-#### Option B : Manuellement
+**Manuellement :**
 
-1. Clic droit sur le fichier `.exe` (ou `python file_watcher.py`)
+1. Clic droit sur le `.exe`
 2. Envoyer vers → Bureau (créer un raccourci)
-3. Renommer le raccourci en « Watchdog »
+3. Renommer en « Watchdog »
 
 ---
 
-## Fonctionnement Interne
+## Fonctionnement
 
-### Watchdog & API Windows
+### Watchdog et l'API Windows
 
-`watchdog` encapsule `ReadDirectoryChangesW`, l'API Windows native pour la notification asynchrone des changements de répertoire. C'est le même mécanisme qu'utilise Windows Defender — purement événementiel, sans polling.
+`watchdog` encapsule `ReadDirectoryChangesW`, l'API Windows de notification asynchrone des changements de répertoire — le même mécanisme que Windows Defender. Aucun polling, tout est événementiel.
 
-### Moteur Regex
+### Regex
 
-Tous les mots bannis sont compilés en un seul motif d'alternance au démarrage :
+Les signatures sont compilées en une seule alternance au démarrage :
 
 ```python
 re.compile(r"(mot1|mot2|...)", re.IGNORECASE)
 ```
 
-Plus efficace que de parcourir une liste — le moteur regex utilise un NFA/DFA et fait correspondre tous les motifs en un seul passage sur la chaîne du nom de fichier.
+Le moteur regex (NFA/DFA) parcourt la chaîne une seule fois pour toutes les règles, ce qui est plus efficace qu'une boucle sur une liste.
 
-### Persistance par le Registre
+### Persistance par le registre
 
-Les clés `HKCU\...\Run` sont exécutées par Windows Explorer à la connexion pour l'utilisateur courant, sans nécessiter de droits administrateur. Identique au fonctionnement de la plupart des applications légitimes en arrière-plan.
+Les clés `HKCU\...\Run` sont exécutées par Explorer à la connexion, sans droits administrateur — c'est le même mécanisme que la majorité des applications de démarrage.
 
-### Processus Watchdog
+### Processus gardien
 
-`guardian.py` inspecte la `cmdline` de chaque processus en cours via `psutil`. Si un processus a le chemin du script comme argument, il est considéré comme actif. Tuer `pythonw.exe` dans le Gestionnaire des tâches le retire de la liste des processus — guardian le détecte en 5 secondes et le relance.
+`guardian.py` cherche dans les arguments de chaque processus le chemin du script surveillé. Si `pythonw.exe` est tué dans le gestionnaire des tâches, guardian le détecte en moins de 5 secondes et le relance.
 
 ---
 
-## Couverture des Signatures de Menaces
+## Signatures couvertes
 
 | Catégorie | Exemples |
 |---|---|
 | Ransomwares | WannaCry, Petya, NotPetya, Locky, REvil, LockBit, BlackCat, Conti, Clop, Hive, Ryuk, DarkSide, Maze, GandCrab, Cerber, CryptoLocker, Avaddon, Egregor... |
 | RATs / Stealers | njRAT, DarkComet, AsyncRAT, Quasar, Remcos, NanoCore, Emotet, TrickBot, Dridex, RedLine, Vidar, Raccoon, AZORult, FormBook, Agent Tesla, Warzone... |
 | Frameworks C2 | Metasploit, Cobalt Strike, Empire, PowerSploit, Mimikatz, Havoc, Sliver, Brute Ratel, Pupy, Meterpreter, Shellter... |
-| Web Shells | c99shell, r57shell, b374k, Weevely, AntSword, Chopper |
+| Web shells | c99shell, r57shell, b374k, Weevely, AntSword, Chopper |
 | Mots-clés génériques | malware, ransomware, exploit, payload, shellcode, backdoor, trojan, rootkit, keylogger, dropper, crypter, worm... |
 | Outils offensifs | sqlmap, Mimikatz, Aircrack, Hashcat, john_the_ripper, masscan, hydra_brute... |
 
 ---
 
-## Limitations & Travaux Futurs
+## Limites et pistes d'évolution
 
-### Limitations actuelles
+### Limites actuelles
 
-- **Pas un antivirus noyau** — espace utilisateur uniquement, pas de pilote noyau ni d'analyse de la mémoire des processus
-- **Scoring heuristique local** — meilleur qu'une simple vérification par nom, mais pas équivalent aux moteurs EDR/AV d'entreprise
-- **Pas de surveillance réseau** — système de fichiers local uniquement
-- **Espace utilisateur** — les processus de niveau SYSTEM peuvent contourner la protection
-- **Mode sans échec** — les clés `HKCU\Run` ne s'exécutent pas en mode sans échec Windows
-- **Pas de flux de réputation cloud par défaut** — pas d'intégration VirusTotal/SIEM encore
-- Les mots-clés génériques (`trojan`, `virus`) peuvent produire des faux positifs sur des fichiers de recherche en sécurité
+- **Espace utilisateur uniquement** — pas de pilote noyau, pas d'analyse mémoire des processus
+- **Scoring heuristique** — plus efficace qu'une simple liste noire, mais loin d'un EDR/AV commercial
+- **Pas de surveillance réseau** — uniquement le système de fichiers local
+- **Contournable par SYSTEM** — un processus avec des droits suffisants peut ignorer le moniteur
+- **Mode sans échec** — les clés `HKCU\Run` ne s'exécutent pas en mode sans échec
+- **Pas de réputation cloud** — aucune intégration VirusTotal ou SIEM par défaut
+- Risque de faux positifs sur des fichiers de recherche en sécurité (mots-clés comme `trojan`, `virus`)
 
-### Extensions possibles
+### Pistes d'évolution
 
-- **Détection par hash** — calculer le SHA256 à la création du fichier, interroger l'API VirusTotal
-- **Analyse du contenu** — détecter la chaîne de test EICAR, les en-têtes PE embarqués, les patterns de shellcode en base64
-- **Mode quarantaine** — déplacer vers un dossier chiffré plutôt que de supprimer
-- **Règles YARA** — intégrer `yara-python` pour l'analyse de contenu basée sur des motifs
-- **Intégration SIEM** — transmettre les événements de log vers Elasticsearch / Splunk
-- **Service Windows** — utiliser `pywin32` pour s'exécuter en tant que SYSTEM, sans nécessiter de session utilisateur
+- **Détection par hash** — SHA256 à la création, requête vers l'API VirusTotal
+- **Analyse du contenu** — chaîne EICAR, en-têtes PE embarqués, shellcode en base64
+- **Quarantaine chiffrée** — déplacement dans un conteneur chiffré plutôt que suppression
+- **Règles YARA** — intégration de `yara-python` pour la détection par motifs
+- **Intégration SIEM** — export des logs vers Elasticsearch ou Splunk
+- **Service Windows** — exécution en tant que SYSTEM via `pywin32`, sans session utilisateur active
 
 ---
 
-## Stack Technique
+## Dépendances
 
 | Bibliothèque | Rôle |
 |---|---|
-| `watchdog` | Surveillance des événements du système de fichiers (encapsule `ReadDirectoryChangesW`) |
-| `psutil` | Inspection des processus multiplateforme |
-| `winreg` | Lecture/écriture du Registre Windows (stdlib) |
-| `re` | Regex compilée pour la correspondance multi-motifs (stdlib) |
-| `shutil` | Suppression récursive de répertoires (stdlib) |
-| `logging` | Log d'événements horodaté rotatif (stdlib) |
-| `subprocess` | Exécution de la commande d'arrêt Windows (stdlib) |
-| `PyInstaller` | Empaquetage des scripts en binaires `.exe` autonomes |
+| `watchdog` | Surveillance du système de fichiers (encapsule `ReadDirectoryChangesW`) |
+| `psutil` | Inspection des processus |
+| `winreg` | Lecture/écriture du registre Windows (stdlib) |
+| `re` | Regex compilée pour la détection multi-signatures (stdlib) |
+| `shutil` | Suppression récursive de dossiers (stdlib) |
+| `logging` | Log rotatif horodaté (stdlib) |
+| `subprocess` | Commande d'arrêt Windows (stdlib) |
+| `PyInstaller` | Compilation en binaires `.exe` autonomes |

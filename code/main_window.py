@@ -78,9 +78,9 @@ class EventItem(QFrame):
         layout.setSpacing(12)
 
         color = CLEAN if verdict == "clean" else (WARN if verdict == "suspicious" else DANGER)
-        dot = QLabel("●")
-        dot.setFixedWidth(14)
-        dot.setStyleSheet(f"color: {color}; font-size: 10px;")
+        dot = QLabel("■")
+        dot.setFixedWidth(12)
+        dot.setStyleSheet(f"color: {color}; font-size: 8px;")
         layout.addWidget(dot)
 
         info = QVBoxLayout()
@@ -235,7 +235,7 @@ class DashboardPage(QWidget):
         left.addWidget(s)
         hdr.addLayout(left)
         hdr.addStretch()
-        self.status_lbl = QLabel("● ACTIF")
+        self.status_lbl = QLabel("ACTIF")
         self.status_lbl.setObjectName("status_on")
         hdr.addWidget(self.status_lbl)
         root.addLayout(hdr)
@@ -246,10 +246,10 @@ class DashboardPage(QWidget):
 
         stats_row = QHBoxLayout()
         stats_row.setSpacing(12)
-        self.card_total = StatCard("Fichiers analysés", "0", TEXT_PRI, "🔍")
-        self.card_susp  = StatCard("Suspects", "0", WARN, "⚠️")
-        self.card_mal   = StatCard("Malveillants", "0", DANGER, "🚨")
-        self.card_quar  = StatCard("En quarantaine", "0", ACCENT2, "🔒")
+        self.card_total = StatCard("Fichiers analysés", "0", TEXT_PRI, "")
+        self.card_susp  = StatCard("Suspects", "0", WARN, "")
+        self.card_mal   = StatCard("Malveillants", "0", DANGER, "")
+        self.card_quar  = StatCard("En quarantaine", "0", ACCENT2, "")
         for c in [self.card_total, self.card_susp, self.card_mal, self.card_quar]:
             stats_row.addWidget(c)
         root.addLayout(stats_row)
@@ -266,7 +266,7 @@ class DashboardPage(QWidget):
         self.feed_layout.setContentsMargins(0, 0, 0, 0)
         self.feed_layout.setSpacing(6)
 
-        self.empty_lbl = QLabel("Aucun événement — le système surveille en silence �")
+        self.empty_lbl = QLabel("Aucun événement détecté")
         self.empty_lbl.setStyleSheet(f"color: {TEXT_SEC}; font-size: 13px;")
         self.empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.feed_layout.addWidget(self.empty_lbl)
@@ -319,7 +319,7 @@ class QuarantinePage(QWidget):
         left.addWidget(s)
         hdr.addLayout(left)
         hdr.addStretch()
-        refresh_btn = QPushButton("↻  Actualiser")
+        refresh_btn = QPushButton("Actualiser")
         refresh_btn.setObjectName("action_blue")
         refresh_btn.clicked.connect(self.load_events)
         hdr.addWidget(refresh_btn)
@@ -411,12 +411,12 @@ class ScannerPage(QWidget):
         hdr.addLayout(left)
         hdr.addStretch()
 
-        choose_btn = QPushButton("📂  Choisir un dossier")
+        choose_btn = QPushButton("Choisir un dossier")
         choose_btn.setObjectName("action_blue")
         choose_btn.clicked.connect(self._choose_folder)
         hdr.addWidget(choose_btn)
 
-        self.scan_btn = QPushButton("▶  Lancer le scan")
+        self.scan_btn = QPushButton("Lancer le scan")
         self.scan_btn.setObjectName("action")
         self.scan_btn.clicked.connect(self._start_scan)
         self.scan_btn.setEnabled(False)
@@ -455,7 +455,7 @@ class ScannerPage(QWidget):
         f = QFileDialog.getExistingDirectory(self, "Choisir un dossier à scanner")
         if f:
             self.folder = f
-            self.folder_lbl.setText(f"📁  {f}")
+            self.folder_lbl.setText(f"{f}")
             self.scan_btn.setEnabled(True)
             self.table.setRowCount(0)
 
@@ -495,8 +495,8 @@ class ScannerPage(QWidget):
         self.scan_btn.setEnabled(True)
         total = self.table.rowCount()
         self.status_lbl.setText(
-            f"✅ Scan terminé — {total} menace(s) détectée(s)" if total
-            else "✅ Scan terminé — aucune menace détectée"
+            f"Scan terminé : {total} menace(s) détectée(s)" if total
+            else "Scan terminé : aucune menace détectée"
         )
         self.progress.setValue(100)
 
@@ -526,8 +526,8 @@ class MainWindow(QMainWindow):
         side_layout.setSpacing(4)
 
         logo_row = QHBoxLayout()
-        shield = QLabel("🐕")
-        shield.setStyleSheet("font-size: 22px;")
+        shield = QLabel("⊠")
+        shield.setStyleSheet("font-size: 20px; font-weight: bold;")
         name = QLabel("Watchdog")
         name.setStyleSheet(f"color: {TEXT_PRI}; font-size: 16px; font-weight: 700;")
         version = QLabel("v2.0")
@@ -545,7 +545,7 @@ class MainWindow(QMainWindow):
         side_layout.addSpacing(8)
 
         self.nav_buttons = []
-        for label, idx in [("🏠  Dashboard", 0), ("🔒  Quarantaine", 1), ("🔍  Scanner", 2)]:
+        for label, idx in [("Dashboard", 0), ("Quarantaine", 1), ("Scanner", 2)]:
             btn = QPushButton(label)
             btn.setObjectName("nav")
             btn.setCheckable(True)
@@ -564,7 +564,7 @@ class MainWindow(QMainWindow):
         watcher_row = QHBoxLayout()
         watcher_lbl = QLabel("Watcher")
         watcher_lbl.setStyleSheet(f"color: {TEXT_SEC}; font-size: 12px;")
-        self.watcher_status = QLabel("● ON")
+        self.watcher_status = QLabel("ON")
         self.watcher_status.setObjectName("status_on")
         watcher_row.addWidget(watcher_lbl)
         watcher_row.addStretch()
